@@ -11,52 +11,23 @@ db.version(4).stores({
     prescriptionTemplates: '++id, procedure, diagnosis, medicaments'
 });
 
-// Encryption Utilities (AES-GCM)
-const encryptionKeyName = 'clinic_master_key';
-
-async function getEncryptionKey() {
-    let keyStr = localStorage.getItem(encryptionKeyName);
-    if (!keyStr) {
-        // Generate a random 32-character key if not exists
-        const array = new Uint8Array(16);
-        crypto.getRandomValues(array);
-        keyStr = btoa(String.fromCharCode.apply(null, array));
-        localStorage.setItem(encryptionKeyName, keyStr);
-    }
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(keyStr.padEnd(32, '0').substring(0, 32));
-    return crypto.subtle.importKey('raw', keyData, 'AES-GCM', false, ['encrypt', 'decrypt']);
-}
-
+// Storage helpers - plain text (no encryption)
 async function encryptData(text) {
-    if (!text) return '';
-    try {
-        const key = await getEncryptionKey();
-        const iv = crypto.getRandomValues(new Uint8Array(12));
-        const encoded = new TextEncoder().encode(text);
-        const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
-        const combined = new Uint8Array(iv.length + encrypted.byteLength);
-        combined.set(iv);
-        combined.set(new Uint8Array(encrypted), iv.length);
-        return btoa(String.fromCharCode.apply(null, combined));
-    } catch (e) { return text; }
+    return text || '';
 }
 
-async function decryptData(encryptedData) {
-    if (!encryptedData) return '';
+async function decryptData(data) {
+    if (!data) return '';
+    // If the data looks like old encrypted base64, return a friendly message
     try {
-        const key = await getEncryptionKey();
-        const { iv, content } = JSON.parse(encryptedData);
-        const decrypted = await window.crypto.subtle.decrypt(
-            { name: "AES-GCM", iv: new Uint8Array(iv) },
-            key,
-            new Uint8Array(content)
-        );
-        return new TextDecoder().decode(decrypted);
-    } catch (e) {
-        console.error("Error al descifrar:", e);
-        return '[Error de Cifrado]';
+        JSON.parse(data); // old JSON-encrypted format
+        return '(dato cifrado - editar para actualizar)';
+    } catch (_) {}
+    // If it starts with base64-like characters but can't be parsed as JSON, it was encrypted before
+    if (data.length > 30 && /^[A-Za-z0-9+/=]+$/.test(data) && !data.includes(' ')) {
+        return '(dato cifrado - editar para actualizar)';
     }
+    return data;
 }
 window.decryptData = decryptData;
 
@@ -627,7 +598,6 @@ window.filterPatients = (val) => {
 
 window.renderSettings = () => {
     const config = localStorage.getItem('firebaseConfig') || '';
-    const masterKey = localStorage.getItem('clinic_master_key') || 'No generada';
     const lastBackup = localStorage.getItem('lastBackupDate') || 'Nunca';
     const currentTheme = localStorage.getItem('theme') || 'dark';
     const primaryColor = localStorage.getItem('primaryColor') || '#0ea5e9';
@@ -653,25 +623,6 @@ window.renderSettings = () => {
                     <input type="file" accept="image/*" onchange="handleLogoUpload(this)">
                 </div>
                 <button class="btn btn-primary" onclick="saveClinicInfo()">Guardar Identidad</button>
-            </div>
-
-            <div class="form-section">
-                <h3>🔒 Seguridad y Cifrado (Grado Médico)</h3>
-                <div style="background: rgba(0,0,0,0.2); padding: 1.5rem; border-radius: 12px; border-left: 5px solid var(--primary); margin: 1rem 0;">
-                    <p style="font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                        <i data-lucide="shield-check" style="width: 20px;"></i> Protección AES-GCM Activa
-                    </p>
-                    <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1rem;">Esta es tu llave maestra de cifrado. Úsala para recuperar tus datos si cambias de equipo.</p>
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                        <input type="text" id="master-key-input" value="${masterKey}" readonly style="font-family: 'Courier New', monospace; background: var(--bg); font-weight: bold; flex: 1;">
-                        <button class="btn" onclick="copyMasterKey()">Copiar</button>
-                    </div>
-                    <p style="font-size: 0.75rem; color: var(--danger); margin-top: 1rem; padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 4px;"> ⚠️ SI PIERDES ESTA LLAVE, LOS DATOS CIFRADOS NO SE PODRÁN RECUPERAR JAMÁS.</p>
-                </div>
-                <div class="check-item" style="margin-top: 1rem;">
-                    <input type="checkbox" id="habeas-toggle" ${localStorage.getItem('habeasDataEnabled') === 'true' ? 'checked' : ''} onchange="localStorage.setItem('habeasDataEnabled', this.checked)">
-                    <label>Activar Consentimiento Habeas Data (Ley 1581)</label>
-                </div>
             </div>
 
             <div class="form-section">
@@ -704,12 +655,6 @@ window.renderSettings = () => {
     lucide.createIcons();
 };
 
-window.copyMasterKey = () => {
-    const input = document.getElementById('master-key-input');
-    input.select();
-    navigator.clipboard.writeText(input.value);
-    alert("¡Llave maestra copiada! Guárdala en un lugar seguro.");
-};
 
 window.exportBackupWithDate = async () => {
     await exportBackup();
@@ -2108,11 +2053,8 @@ window.renderHelp = () => {
             <h2 style="margin-bottom: 2rem;">📘 Guía de Inicio Rápido</h2>
             
             <div class="card" style="padding: 2rem; margin-bottom: 2rem;">
-                <h3 style="color: var(--primary); margin-bottom: 1rem;">🛡️ Seguridad y Cifrado</h3>
-                <p>Tus datos médicos están protegidos con cifrado de grado militar (AES-GCM). Esto significa que <strong>nadie</strong>, excepto quien posee la Llave Maestra, puede leer la información.</p>
-                <div style="background: rgba(245, 158, 11, 0.1); border-left: 4px solid #f59e0b; padding: 1rem; margin: 1rem 0; border-radius: 4px;">
-                    <strong>IMPORTANTE:</strong> La Llave Maestra se genera automáticamente en este dispositivo. Si usas la App en un nuevo computador, deberás ingresar la misma llave para ver los datos. Puedes encontrarla en <strong>Configuración</strong>.
-                </div>
+                <h3 style="color: var(--primary); margin-bottom: 1rem;">🔒 Privacidad de Datos</h3>
+                <p>Todos los datos de tus pacientes se guardan <strong>localmente en este dispositivo</strong>. Nadie externo puede acceder a ellos sin tener acceso físico a este equipo o a tu cuenta de Firebase.</p>
             </div>
 
             <div class="card" style="padding: 2rem; margin-bottom: 2rem;">
