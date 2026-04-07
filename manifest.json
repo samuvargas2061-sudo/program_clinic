@@ -1,0 +1,16 @@
+{
+    "name": "Program Clinic",
+    "short_name": "Clinic",
+    "description": "Sistema de Historia Clínica Digital Offline",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#0F172A",
+    "theme_color": "#4F46E5",
+    "icons": [
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/3063/3063176.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

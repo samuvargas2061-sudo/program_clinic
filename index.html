@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Program Clinic - Historia Clínica Digital</title>
+    <meta name="description" content="Sistema de gestión de historias clínicas con soporte offline.">
+    <link rel="stylesheet" href="src/styles/main.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <!-- Dexie for IndexedDB -->
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="dark-mode">
+    <div id="app">
+        <nav class="sidebar">
+            <div class="logo">
+                <i data-lucide="activity"></i>
+                <span>Program Clinic</span>
+            </div>
+            <ul class="nav-links">
+                <li class="active" data-view="dashboard">
+                    <i data-lucide="layout-dashboard"></i> Dashboard
+                </li>
+                <li data-view="patients">
+                    <i data-lucide="users"></i> Pacientes
+                </li>
+                <li data-view="appointments">
+                    <i data-lucide="calendar"></i> Citas
+                </li>
+                <li data-view="quotations">
+                    <i data-lucide="file-text"></i> Cotizaciones
+                </li>
+                <li data-view="history">
+                    <i data-lucide="clipboard-list"></i> Historias
+                </li>
+                <li data-view="help">
+                    <i data-lucide="help-circle"></i> Ayuda
+                </li>
+                <li data-view="settings">
+                    <i data-lucide="settings"></i> Configuración
+                </li>
+            </ul>
+            
+            <div id="install-pwa-btn" style="display: none; padding: 1rem; border-top: 1px solid var(--border); margin-top: auto;">
+                <button class="btn" style="width: 100%; background: var(--primary); color: white; display: flex; align-items: center; gap: 0.5rem; justify-content: center; font-size: 0.8rem;" onclick="window.installApp()">
+                    <i data-lucide="download" style="width: 16px;"></i>
+                    Instalar App
+                </button>
+            </div>
+
+            <div class="status-indicator">
+                <span class="dot"></span>
+                <span class="status-text">Online</span>
+            </div>
+        </nav>
+
+        <main class="content">
+            <header class="top-bar">
+                <h1 id="view-title">Dashboard</h1>
+                <div class="user-profile" id="user-profile-btn" onclick="toggleSessionMenu()" style="cursor: pointer; position: relative; user-select: none;">
+                    <div class="avatar" id="user-avatar">??</div>
+                    <span id="user-name">Sin sesión</span>
+                    <i data-lucide="chevron-down" style="width:14px; margin-left:4px; color: var(--text-muted);"></i>
+
+                    <!-- Session Dropdown -->
+                    <div id="session-dropdown" onclick="event.stopPropagation()" style="display:none; position:absolute; top:110%; right:0; background:var(--surface); border:1px solid var(--border); border-radius:12px; min-width:240px; box-shadow:0 8px 24px rgba(0,0,0,0.3); z-index:9999; overflow:hidden;">
+                        <div id="session-user-info" style="padding:1rem; border-bottom:1px solid var(--border); font-size:0.85rem; color:var(--text-muted);">No hay sesión activa</div>
+                        <div id="session-login-section" style="padding:1rem;">
+                            <div style="margin-bottom:0.75rem;">
+                                <input id="login-email" type="email" placeholder="Email" onclick="event.stopPropagation()" style="width:100%;padding:0.6rem;border-radius:8px;border:1px solid var(--border);background:var(--background);color:var(--text);font-size:0.85rem;">
+                            </div>
+                            <div style="margin-bottom:0.75rem;">
+                                <input id="login-password" type="password" placeholder="Contraseña" onclick="event.stopPropagation()" style="width:100%;padding:0.6rem;border-radius:8px;border:1px solid var(--border);background:var(--background);color:var(--text);font-size:0.85rem;">
+                            </div>
+                            <button onclick="doLogin(event)" class="btn" style="width:100%;background:var(--primary);color:white;font-size:0.85rem;">Iniciar Sesión</button>
+                            <p id="login-error" style="color:var(--danger);font-size:0.78rem;margin-top:0.5rem;display:none;"></p>
+                        </div>
+                        <div id="session-logout-section" style="display:none; padding:1rem; border-top:1px solid var(--border);">
+                            <button onclick="doLogout(event)" class="btn" style="width:100%;background:var(--danger);color:white;font-size:0.85rem;">Cerrar Sesión</button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <section id="main-view" class="view-container">
+                <div style="display: flex; justify-content: center; align-items: center; height: 300px; color: var(--text-muted);">
+                    <p id="loading-msg">Cargando sistema de historia clínica...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-container" class="hidden"></div>
+
+    <script src="src/js/print_service.js"></script>
+    <script src="src/js/app.js"></script>
+    <script>
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then((reg) => {
+                    console.log('Service Worker Registrado', reg.scope);
+                }).catch((err) => {
+                    console.log('Fallo registro SW', err);
+                });
+            });
+        }
+        // Lucide icon replacement
+        lucide.createIcons();
+    </script>
+</body>
+</html>
